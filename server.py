@@ -132,6 +132,13 @@ def login():
             password=password)
 
         cur = conn.cursor()
+        cur.execute('SELECT * FROM tasks WHERE level = %s ',
+                    ("Facil",)
+                    )
+
+        task = cur.fetchone()[0]
+        conn.commit()
+
 
         cur.execute('SELECT * FROM student WHERE email = %s ',
                     (todo_data["email"],)
@@ -143,11 +150,17 @@ def login():
                         'VALUES (%s, %s, %s,%s, %s, %s,%s, %s, %s,%s, %s, %s)',
                         (todo_data["email"],
                          todo_data["password"],
-                         None,
+                         task,
                          "Facil",
                          0.0,0.0, 0.0,0.0, 0.0,0.0,0.0, 0.0
 
                          ))
+            cur.execute('SELECT LASTVAL()')
+            lastid = cur.fetchone()[0]
+
+            cur.execute('INSERT INTO distribution (id_task, id_student, first_step, second_step, third_step, fourth_step)'
+                        'VALUES (%s, %s, %s, %s,%s, %s)',
+                        (task,lastid,None, None, None, None ))
 
             response = flask.jsonify({'response': 'success', 'id': "new"})
             conn.commit()
@@ -167,6 +180,157 @@ def login():
 
 
         return response
+
+
+@app.route("/task")
+def task():
+    mail = request.args.get('email')
+
+
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM student WHERE email = %s',
+                (mail,)
+                )
+
+    task_id = cur.fetchone()[3]
+
+
+    conn.commit()
+
+    cur.execute('SELECT * FROM tasks WHERE id = %s',
+                (task_id,)
+                )
+
+    task = cur.fetchone()
+
+
+    tasks_dict = {}
+    tasks_dict["id"] = task[0]
+    tasks_dict["title"] = task[1]
+    tasks_dict["professor"] = task[2]
+    tasks_dict["enunciado"] = task[3]
+    tasks_dict["picture"] = task[4]
+    tasks_dict["diagram"] = task[5]
+    tasks_dict["level"] = task[6]
+    tasks_dict["data_added"] = task[9]
+    tasks_dict["etapa"] = task[7]
+    tasks_dict["etapafin"] = task[8]
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    return tasks_dict
+
+@app.route('/delete')
+def delete():
+    id_get = request.args.get('task')
+    print(id_get)
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+
+    cur.execute('DELETE FROM tasks WHERE id = %s',
+                (id_get,)
+                )
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    return {'response': 'success'}
+
+@app.route("/students")
+def students():
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+
+    cur.execute('SELECT * FROM student '
+                )
+    students = cur.fetchall()
+    dict = {}
+    for student in students:
+        dict[student[0]] = {}
+        dict[student[0]]["id"] = student[0]
+        dict[student[0]]["email"] = student[1]
+        dict[student[0]]["actual_task"] = student[3]
+        dict[student[0]]["level"] = student[4]
+        dict[student[0]]["rotula"] = student[5]
+        dict[student[0]]["fijo"] = student[6]
+        dict[student[0]]["deslizante"] = student[7]
+        dict[student[0]]["empotrado"] = student[8]
+        dict[student[0]]["biela"] = student[9]
+        dict[student[0]]["momento"] = student[10]
+        dict[student[0]]["fuerza"] = student[11]
+        dict[student[0]]["angulo"] = student[12]
+        dict[student[0]]["date_added"] = student[13]
+
+
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    return dict
+
+
+@app.route("/student")
+def student():
+    id_get = request.args.get('id')
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+
+    cur.execute('SELECT * FROM student WHERE id = %s ',
+                (id_get,)
+                )
+    student = cur.fetchone()
+    dict = {}
+
+    dict["id"] = student[0]
+    dict["email"] = student[1]
+    dict["actual_task"] = student[3]
+    dict["level"] = student[4]
+    dict["rotula"] = student[5]
+    dict["fijo"] = student[6]
+    dict["deslizante"] = student[7]
+    dict["empotrado"] = student[8]
+    dict["biela"] = student[9]
+    dict["momento"] = student[10]
+    dict["fuerza"] = student[11]
+    dict["angulo"] = student[12]
+    dict["date_added"] = student[13]
+
+
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    return dict
 
 
 
