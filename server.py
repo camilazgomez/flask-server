@@ -4,6 +4,10 @@ from flask import Flask, redirect, url_for, render_template, request, session
 import psycopg2
 import flask
 from flask_cors import CORS
+from assignment import *
+from checkfirst import *
+from checkthird import *
+from updateStudent import *
 
 host = "ec2-52-210-97-223.eu-west-1.compute.amazonaws.com"
 database ="dfsdqhnrnbpm5g"
@@ -146,13 +150,17 @@ def login():
 
         record = cur.fetchall()
         if len(record) == 0:
-            cur.execute('INSERT INTO student (email, password,actual_task,level,rotula,fijo,deslizante,empotrado,biela,momento,fuerza,angulo)'
-                        'VALUES (%s, %s, %s,%s, %s, %s,%s, %s, %s,%s, %s, %s)',
+            cur.execute('INSERT INTO student (email, password,actual_task,level,rotula,fijo,deslizante,empotrado,biela,momento,fuerza,angulo,'
+                        'rotula_total, fijo_total, deslizante_total, empotrado_total,biela_total, momento_total, fuerza_total,'
+                        'angulo_total, rotula_unit, fijo_unit, deslizante_unit, empotrado_unit,biela_unit, momento_unit, fuerza_unit,'
+                        'angulo_unit )'
+                        'VALUES (%s, %s, %s,%s, %s, %s,%s, %s, %s,%s, %s, %s, %s, %s,%s, %s, %s,%s, %s, %s, %s, %s,%s, %s, %s,%s, %s, %s)',
                         (todo_data["email"],
                          todo_data["password"],
                          task,
                          "Facil",
-                         0.0,0.0, 0.0,0.0, 0.0,0.0,0.0, 0.0
+                         0.0,0.0, 0.0,0.0, 0.0,0.0,0.0, 0.0,
+                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
                          ))
             cur.execute('SELECT LASTVAL()')
@@ -160,7 +168,7 @@ def login():
 
             cur.execute('INSERT INTO distribution (id_task, id_student, first_step, second_step, third_step, fourth_step)'
                         'VALUES (%s, %s, %s, %s,%s, %s)',
-                        (task,lastid,None, None, None, None ))
+                        (task,lastid,None, True, None, None ))
 
             response = flask.jsonify({'response': 'success', 'id': "new"})
             conn.commit()
@@ -227,6 +235,7 @@ def task():
     cur.close()
     conn.close()
 
+
     return tasks_dict
 
 @app.route('/delete')
@@ -240,7 +249,20 @@ def delete():
         password=password)
 
     cur = conn.cursor()
+    '''
+    cur.execute('SELECT * FROM tasks WHERE id= %s',
+                (id_get,))
 
+    task_level = cur.fetchone()[6]
+
+    cur.execute('SELECT * FROM tasks WHERE level = %s and id != %s',
+                (task_level,id_get))
+
+    replacement = cur.fetchone()[0]
+
+    cur.execute('UPDATE student SET actual_task = %s WHERE actual_task = %s' ,
+                [replacement, id_get])
+    '''
     cur.execute('DELETE FROM tasks WHERE id = %s',
                 (id_get,)
                 )
@@ -294,7 +316,7 @@ def students():
 
 @app.route("/student")
 def student():
-    id_get = request.args.get('id')
+    id_get = request.args.get('email')
     conn = psycopg2.connect(
         host=host,
         database=database,
@@ -303,7 +325,7 @@ def student():
 
     cur = conn.cursor()
 
-    cur.execute('SELECT * FROM student WHERE id = %s ',
+    cur.execute('SELECT * FROM student WHERE email = %s ',
                 (id_get,)
                 )
     student = cur.fetchone()
@@ -332,6 +354,168 @@ def student():
 
     return dict
 
+@app.route("/next_task")
+def next_task():
+    email_get = request.args.get('email')
+
+
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM student WHERE email = %s',
+                (email_get,))
+    student = cur.fetchone()
+    id_get = student[0]
+    old_task = student[3]
+
+    updateStudent(str(old_task), str(id_get))
+    new_task = pick_task(email_get)
+    task_id = new_task
+    print(new_task)
+
+
+
+    cur.execute('INSERT INTO distribution (Id_task, Id_student, first_step, second_step, third_step, fourth_step)'
+                'VALUES (%s, %s, %s, %s,%s, %s)',
+                (int(task_id), int(id_get), None, True, None, None))
+
+
+    conn.commit()
+
+    cur.execute('SELECT * FROM tasks WHERE id = %s',
+                (task_id,)
+                )
+
+    task = cur.fetchone()
+
+    tasks_dict = {}
+    tasks_dict["id"] = task[0]
+    tasks_dict["title"] = task[1]
+    tasks_dict["professor"] = task[2]
+    tasks_dict["enunciado"] = task[3]
+    tasks_dict["picture"] = task[4]
+    tasks_dict["diagram"] = task[5]
+    tasks_dict["level"] = task[6]
+    tasks_dict["data_added"] = task[9]
+    tasks_dict["etapa"] = task[7]
+    tasks_dict["etapafin"] = task[8]
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+    return tasks_dict
+
+@app.route("/checkone",  methods= ['POST'])
+def checkone():
+    todo_data = request.get_json()
+    response = check_first(todo_data["id_task"], todo_data["diagram"], todo_data["punto"])
+
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM student WHERE email = %s',
+                (todo_data["email"],))
+    id_get = cur.fetchone()[0]
+
+    if response[0] == True:
+        cur.execute('UPDATE distribution SET first_step = %s WHERE id_task = %s and id_student = %s',
+           [ True, todo_data["id_task"], id_get])
+        conn.commit()
+        return {"response": "true", "nuevoPunto": response[1]}
+
+    cur.execute('UPDATE distribution SET first_step = %s WHERE id_task = %s and id_student = %s',
+                [False, todo_data["id_task"], id_get])
+
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+
+    return {"response": json.dumps(response[0]), "nuevoPunto": response[1]}
+
+
+@app.route("/checkthird",  methods= ['POST'])
+def checkthird():
+    todo_data = request.get_json()
+    response = check_third(todo_data["id_task"], todo_data["diagram"])
+
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM student WHERE email = %s',
+                (todo_data["email"],))
+    id_get = cur.fetchone()[0]
+
+
+   #actualizar distribucion copy paste del otro
+
+    if response[0] == True:
+        cur.execute('UPDATE distribution SET third_step = %s WHERE id_task = %s and id_student = %s',
+           [ True, todo_data["id_task"], id_get])
+        conn.commit()
+        return {"response": "true", "nuevoPunto": response[1]}
+
+    cur.execute('UPDATE distribution SET third_step = %s WHERE id_task = %s and id_student = %s',
+                [False, todo_data["id_task"], id_get])
+
+
+    conn.commit()
+
+    cur.close()
+    conn.close()
+
+    if response[0] == True:
+        {"response": response[0]}
+
+
+    return {"response": response[1] }
+
+
+@app.route("/check4",  methods= ['POST'])
+def check_fourth():
+    todo_data = request.get_json()
+    response = todo_data["response"]
+
+    conn = psycopg2.connect(
+        host=host,
+        database=database,
+        user=user,
+        password=password)
+
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM student WHERE email = %s',
+                (todo_data["email"],))
+    id_get = cur.fetchone()[0]
+
+    if response == True:
+        cur.execute('UPDATE distribution SET fourth_step = %s WHERE id_task = %s and id_student = %s',
+                    [True, todo_data["id_task"], id_get])
+        conn.commit()
+        cur.close()
+        conn.close()
+        return {"response": "succes"}
+
+    cur.execute('UPDATE distribution SET fourth_step = %s WHERE id_task = %s and id_student = %s',
+                [False, todo_data["id_task"], id_get])
+    conn.commit()
+    cur.close()
+    conn.close()
+    return {"response": "succes"}
 
 
 
